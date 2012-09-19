@@ -115,6 +115,7 @@ private slots:
     void antighostToolButtonPaintToggled(bool);
     void saveAgMask();
     void applySavedAgMask();
+    void createMask();
 };
 
 #endif

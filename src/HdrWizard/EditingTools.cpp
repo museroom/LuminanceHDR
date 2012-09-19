@@ -182,6 +182,7 @@ void EditingTools::setupConnections() {
     connect(m_selectionTool, SIGNAL(moved(QPoint)), this, SLOT(updateScrollBars(QPoint)));
     connect(removeMaskRadioButton,SIGNAL(toggled(bool)),m_agWidget,SLOT(setBrushMode(bool)));
 
+    connect(toolButtonCreateMask,SIGNAL(clicked()),this,SLOT(createMask()));
     connect(m_hcm, SIGNAL(imagesSaved()), this, SLOT(restoreSaveImagesButtonState()));
 }
 
@@ -659,3 +660,17 @@ void EditingTools::antighostToolButtonPaintToggled(bool toggled)
 {
     (toggled) ? m_agWidget->setDrawWithBrush() :  m_agWidget->setDrawPath();
 }
+
+void EditingTools::createMask()
+{
+    QString filename = movableListWidget->currentItem()->text();
+    int idx1 = m_filesMap[filename];
+    filename = referenceListWidget->currentItem()->text();
+    int idx2 = m_filesMap[filename];
+    float threshold = doubleSpinBoxThreshold->value();
+    QImage *newMask = m_hcm->calculateAgMask(idx1, idx2, threshold);
+    delete m_antiGhostingMasksList[idx1];
+    m_antiGhostingMasksList[idx1] = new QImage(*newMask);    
+    m_agWidget->update();
+}
+
