@@ -44,6 +44,7 @@
 #include "HdrCreationManager.h"
 #include "arch/math.h"
 #include "Common/msec_timer.h"
+#include "Viewers/Histogram.h"
 
 namespace
 {
@@ -362,6 +363,102 @@ void computeLightnessDifference(pfs::Array2D *L1, pfs::Array2D *L2, float **map)
     }
 }
 
+void partition(pfs::Array2D *image, QList<float> &set1, QList<float> &set2, float threshold)
+{
+    int size = image->getCols() * image->getRows();
+    
+    for (int i = 0; i < size; i++)
+        if ((*image)(i) < threshold) 
+            set1.append((*image)(i));
+        else
+            set2.append((*image)(i));
+}
+
+float computeMean(QList<float> &list)
+{
+    float mean = 0.0f;
+    
+    foreach(float v, list)
+        mean += v;
+
+    return mean / list.count();
+}
+
+void histogramSegmentation(pfs::Array2D *image, float eps)
+{
+    int size = image->getCols() * image->getRows();
+    float T1 = 0.5f, T2;
+    QList<float> set1, set2;
+
+    do {
+        T2 = T1;
+        partition(image, set1, set2, T1);
+        float avg1 = computeMean(set1);
+        float avg2 = computeMean(set2);
+        T1 = (avg1 + avg2) * 0.5f;
+        qDebug() << "delta = " << std::abs(T1 - T2);
+    }
+    while (std::abs(T1 - T2) > eps);  
+    
+    for (int i = 0; i < size; i++)
+        if ((*image)(i) < T1)
+            (*image)(i) = 0.0f; 
+    
+    qDebug() << "Done";
+}    
+
+void createMask(pfs::Array2D *R, pfs::Array2D *G, pfs::Array2D *B, QImage *mask, float eps)
+{
+    uchar *data = mask->bits();    
+
+    int width = R->getCols();
+    int height = R->getRows();
+
+    pfs::Array2D *tempR, *tempG, *tempB;
+    tempR = new pfs::Array2D(width, height);
+    tempG = new pfs::Array2D(width, height);
+    tempB = new pfs::Array2D(width, height);
+    
+    pfs::copyArray(R, tempR);
+    pfs::copyArray(B, tempG);
+    pfs::copyArray(G, tempB);
+    
+    float *max = findMax(tempR, tempG, tempB, width, height);
+    normalize(tempR, tempG, tempB, width, height, *max);
+
+    float h, s, l;
+    // convert to hsl and scale lightness (R, G and B will contain the H, S and L values)
+    for (int j = 0; j < height; j++) {
+        for (int i = 0; i < width; i++) {
+            rgb2hsl((*tempR)(i, j), (*tempG)(i, j), (*tempB)(i, j), &h, &s, &l); 
+            (*tempR)(i, j) = h;      
+            (*tempG)(i, j) = s;      
+            (*tempB)(i, j) = l;      
+        }
+    }    
+    histogramSegmentation(tempB, eps);   
+
+    for (int j = 0; j < height; j++) {
+        for (int i = 0; i < width; i++) {
+            if ((*tempB)(i, j) == 0.0f) {
+                *(data + 4*(i + j*width) + 0) = 0; // alpha
+                *(data + 4*(i + j*width) + 1) = 0; // red
+                *(data + 4*(i + j*width) + 2) = 0; // green
+                *(data + 4*(i + j*width) + 3) = 0; // blue
+            }
+            else {
+                *(data + 4*(i + j*width) + 0) = 255; // alpha
+                *(data + 4*(i + j*width) + 1) = 0;   // red
+                *(data + 4*(i + j*width) + 2) = 0;   // green
+                *(data + 4*(i + j*width) + 3) = 255; // blue
+            }
+        }
+    }
+    delete tempR;
+    delete tempG;
+    delete tempB;
+} 
+
 void createMask(pfs::Array2D *R1, pfs::Array2D *G1, pfs::Array2D *B1, pfs::Array2D *R2, pfs::Array2D *G2, pfs::Array2D *B2, 
     QImage *mask, float threshold)
 {
@@ -509,6 +606,8 @@ void createMask(pfs::Array2D *R1, pfs::Array2D *G1, pfs::Array2D *B1, pfs::Array
 
     qDebug() << "Done";
 }
+
+
 }
 //
 // ----------------------------------------------------------------------------------
@@ -1237,5 +1336,116 @@ QImage *HdrCreationManager::calculateAgMask(int index1, int index2, float thresh
     createMask(listmdrR[index1], listmdrG[index1], listmdrB[index1],
                         listmdrR[index2], listmdrG[index2], listmdrB[index2],
                             newMask, threshold);
+    return newMask;
+}
+
+QImage *HdrCreationManager::calculateAgMask(QRect rect, int index1, int index2, float eps)
+{
+    int width = rect.width();
+    int height = rect.height();
+    pfs::Array2D *R1, *G1, *B1, *R2, *G2, *B2;
+    
+    R1 = new pfs::Array2D(width, height);
+    G1 = new pfs::Array2D(width, height);
+    B1 = new pfs::Array2D(width, height);
+    R2 = new pfs::Array2D(width, height);
+    G2 = new pfs::Array2D(width, height);
+    B2 = new pfs::Array2D(width, height);
+
+    int x_ul, y_ul, x_br, y_br;
+
+    rect.getCoords(&x_ul, &y_ul, &x_br, &y_br);
+
+    pfs::copyArray(listmdrR[index1], R1, x_ul, y_ul, x_br, y_br);
+    pfs::copyArray(listmdrG[index1], G1, x_ul, y_ul, x_br, y_br);
+    pfs::copyArray(listmdrB[index1], B1, x_ul, y_ul, x_br, y_br);
+    pfs::copyArray(listmdrR[index2], R2, x_ul, y_ul, x_br, y_br);
+    pfs::copyArray(listmdrG[index2], G2, x_ul, y_ul, x_br, y_br);
+    pfs::copyArray(listmdrB[index2], B2, x_ul, y_ul, x_br, y_br);
+
+    QImage *newMask = new QImage(width, height, QImage::Format_ARGB32);
+
+    qreal avgLight1 = averageLightness(R1, G1, B1);
+    qreal avgLight2 = averageLightness(R2, G2, B2);
+    qreal sf = avgLight1 / avgLight2;
+
+    if (sf > 1.0f) sf = 1.0f / sf; 
+
+    float *max1 = findMax(R1, G1, B1, width, height);
+    float *max2 = findMax(R2, G2, B2, width, height);
+
+    float max = std::max(*max1, *max2);
+
+    normalize(R1, G1, B1, width, height, max);
+    normalize(R2, G2, B2, width, height, max);
+
+    float h, s, l;
+    // convert to hsl and scale lightness (R, G and B will contain the H, S and L values)
+    for (int j = 0; j < height; j++) {
+        for (int i = 0; i < width; i++) {
+            rgb2hsl((*R1)(i, j), (*G1)(i, j), (*B1)(i, j), &h, &s, &l); 
+            (*R1)(i, j) = h;      
+            (*G1)(i, j) = s;      
+            (*B1)(i, j) = l;      
+        }
+    }    
+    for (int j = 0; j < height; j++) {
+        for (int i = 0; i < width; i++) {
+            rgb2hsl((*R2)(i, j), (*G2)(i, j), (*B2)(i, j), &h, &s, &l); 
+            (*R2)(i, j) = h;      
+            (*G2)(i, j) = s;      
+            (*B2)(i, j) = sf * l;      
+        }
+    }    
+
+    float *maxB1 = std::max_element(B1->getRawData(), B1->getRawData() + width*height);
+    float *maxB2 = std::max_element(B2->getRawData(), B2->getRawData() + width*height);
+
+    max = std::max(*maxB1, *maxB2);
+
+    std::transform(B1->getRawData(), B1->getRawData() + width*height, B1->getRawData(), std::bind2nd(std::divides<float>(),max));
+    std::transform(B2->getRawData(), B2->getRawData() + width*height, B2->getRawData(), std::bind2nd(std::divides<float>(),max));
+        
+    float **lightnessMap = new float*[width];
+    for (int col = 0; col < width; col++)
+    {
+        lightnessMap[col] = new float[height];
+    }
+    
+    computeLightnessDifference(B1, B2, lightnessMap);
+    createMask(R1, G1 , B1, newMask, eps);
+
+    float r, g, b;
+    // back to rgb again
+    for (int j = 0; j < height; j++) {
+        for (int i = 0; i < width; i++) {
+            hsl2rgb((*R1)(i, j), (*G1)(i, j), (*B1)(i, j), &r, &g, &b);
+            (*R1)(i, j) = r;      
+            (*G1)(i, j) = g;      
+            (*B1)(i, j) = b;      
+        }
+    }
+    for (int j = 0; j < height; j++) {
+        for (int i = 0; i < width; i++) {
+            hsl2rgb((*R2)(i, j), (*G2)(i, j), (*B2)(i, j), &r, &g, &b);
+            (*R2)(i, j) = r;      
+            (*G2)(i, j) = g;      
+            (*B2)(i, j) = b;      
+        }
+    }
+
+    for (int col = 0; col < width; col++)
+    {
+        delete [] lightnessMap[col];
+    }
+    delete [] lightnessMap;
+    
+    delete R1;
+    delete G1;
+    delete B1;
+    delete R2;
+    delete G2;
+    delete B2;
+
     return newMask;
 }

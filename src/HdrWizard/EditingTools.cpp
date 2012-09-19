@@ -30,6 +30,7 @@
 #include <QWhatsThis>
 #include <QColorDialog>
 #include <QFileDialog>
+#include <QPainter>
 #include <QDebug>
 
 #include "Common/config.h"
@@ -174,6 +175,7 @@ void EditingTools::setupConnections() {
     connect(toolButtonSaveMask,SIGNAL(clicked()),m_agWidget,SLOT(saveAgMask()));
     connect(toolButtonSaveMask,SIGNAL(clicked()),this,SLOT(saveAgMask()));
     connect(toolButtonApplyMask,SIGNAL(clicked()),this,SLOT(applySavedAgMask()));
+    connect(toolButtonSelect,SIGNAL(toggled(bool)),this,SLOT(selectButtonClicked(bool)));
 
     connect(Next_Finishbutton,SIGNAL(clicked()),this,SLOT(nextClicked()));
     connect(m_previewWidget, SIGNAL(moved(QPoint)), this, SLOT(updateScrollBars(QPoint)));
@@ -663,14 +665,25 @@ void EditingTools::antighostToolButtonPaintToggled(bool toggled)
 
 void EditingTools::createMask()
 {
+    if (!m_selectionTool->hasSelection())
+        return;
+    QRect rect = m_selectionTool->getSelectionRect();
     QString filename = movableListWidget->currentItem()->text();
     int idx1 = m_filesMap[filename];
     filename = referenceListWidget->currentItem()->text();
     int idx2 = m_filesMap[filename];
-    float threshold = doubleSpinBoxThreshold->value();
-    QImage *newMask = m_hcm->calculateAgMask(idx1, idx2, threshold);
-    delete m_antiGhostingMasksList[idx1];
-    m_antiGhostingMasksList[idx1] = new QImage(*newMask);    
+    float eps = doubleSpinBoxThreshold->value();
+    QImage *newMask = m_hcm->calculateAgMask(rect, idx1, idx2, eps);
+    QPainter p(m_antiGhostingMasksList[idx1]);
+    p.drawImage(rect, *newMask, newMask->rect());
+    delete newMask;
     m_agWidget->update();
 }
 
+void EditingTools::selectButtonClicked(bool toggled)
+{
+    if (toggled)
+        m_selectionTool->show();
+    else
+        m_selectionTool->hide();
+}

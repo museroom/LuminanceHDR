@@ -116,6 +116,7 @@ private slots:
     void saveAgMask();
     void applySavedAgMask();
     void createMask();
+    void selectButtonClicked(bool);
 };
 
 #endif
