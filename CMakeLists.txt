@@ -1,6 +1,8 @@
 PROJECT(luminance-hdr)
 CMAKE_MINIMUM_REQUIRED(VERSION 2.6.0)
 
+SET(ITK_DIR "/usr/local/lib/cmake/ITK-4.2")
+
 # set include path for FindXXX.cmake files
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
@@ -119,6 +121,10 @@ ELSE()
     FIND_PACKAGE(libjpeg REQUIRED)
     FIND_PACKAGE(lcms2 REQUIRED)
     FIND_PACKAGE(libpng REQUIRED)
+    FIND_PACKAGE(ITK REQUIRED)
+    IF(ITK_FOUND)
+        INCLUDE(${ITK_USE_FILE})
+    ENDIF(ITK_FOUND)
 
 ENDIF()
 

@@ -184,7 +184,8 @@ void EditingTools::setupConnections() {
     connect(m_selectionTool, SIGNAL(moved(QPoint)), this, SLOT(updateScrollBars(QPoint)));
     connect(removeMaskRadioButton,SIGNAL(toggled(bool)),m_agWidget,SLOT(setBrushMode(bool)));
 
-    connect(toolButtonCreateMask,SIGNAL(clicked()),this,SLOT(createMask()));
+    //connect(toolButtonCreateMask,SIGNAL(clicked()),this,SLOT(createMask()));
+    connect(toolButtonCreateMask,SIGNAL(clicked()),m_hcm,SLOT(doAntiGhosting()));
     connect(m_hcm, SIGNAL(imagesSaved()), this, SLOT(restoreSaveImagesButtonState()));
 }
 
@@ -673,7 +674,11 @@ void EditingTools::createMask()
     filename = referenceListWidget->currentItem()->text();
     int idx2 = m_filesMap[filename];
     float eps = doubleSpinBoxThreshold->value();
-    QImage *newMask = m_hcm->calculateAgMask(rect, idx1, idx2, eps);
+    QImage *newMask;
+    if (radioButtonAlgo1->isChecked())
+        newMask = m_hcm->calculateAgMaskAlgo1(rect, idx1, idx2, eps);
+    else
+        newMask = m_hcm->calculateAgMaskAlgo2(rect, idx1, idx2, eps);
     QPainter p(m_antiGhostingMasksList[idx1]);
     p.drawImage(rect, *newMask, newMask->rect());
     delete newMask;

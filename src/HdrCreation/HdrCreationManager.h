@@ -107,11 +107,12 @@ public:
 	void saveMDRs(QString);
 	void doAntiGhosting(int);
     QImage *calculateAgMask(int, int, float);
-    QImage *calculateAgMask(QRect, int, int, float);
-    
+    QImage *calculateAgMaskAlgo1(QRect, int, int, float);
+    QImage *calculateAgMaskAlgo2(QRect, int, int, float);
 public slots:
 	//remove temp 8or16 bit tiff files created by libRaw upon raw input.
 	void removeTempFiles();
+	void doAntiGhosting();
 signals:
     void finishedLoadingInputFiles(const QStringList& filesLackingExif);
     void errorWhileLoading(const QString& message); //also for !valid size
