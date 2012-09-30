@@ -226,7 +226,7 @@ float computeK(pfs::Array2D *Fopt, pfs::Array2D *F, int idxOpt, int idx, int i, 
     float Fx = ( (*Fopt)(i + 1, j) - (*Fopt)(i - 1, j) ) * 0.5f;
     float Fy = ( (*Fopt)(i, j + 1) - (*Fopt)(i, j - 1 ) ) * 0.5f;
 
-    qDebug() << "Ft: " << Ft << " Fx: " <<  Fx << " Fy: " << Fy;
+    //qDebug() << "Ft: " << Ft << " Fx: " <<  Fx << " Fy: " << Fy;
     return Ft + i * Fx + j * Fy;
 }
 
@@ -491,6 +491,16 @@ void normalize(pfs::Array2D *R, pfs::Array2D *G, pfs::Array2D *B)
     std::transform(R->getRawData(), R->getRawData() + width*height, R->getRawData(), std::bind2nd(std::divides<float>(),max));
     std::transform(G->getRawData(), G->getRawData() + width*height, G->getRawData(), std::bind2nd(std::divides<float>(),max));
     std::transform(B->getRawData(), B->getRawData() + width*height, B->getRawData(), std::bind2nd(std::divides<float>(),max));
+}
+
+void rescale(pfs::Array2D *R, pfs::Array2D *G, pfs::Array2D *B)
+{
+    int width = R->getCols();
+    int height = R->getRows();
+
+    std::transform(R->getRawData(), R->getRawData() + width*height, R->getRawData(), std::bind2nd(std::multiplies<float>(),65535));
+    std::transform(G->getRawData(), G->getRawData() + width*height, G->getRawData(), std::bind2nd(std::multiplies<float>(),65535));
+    std::transform(B->getRawData(), B->getRawData() + width*height, B->getRawData(), std::bind2nd(std::multiplies<float>(),65535));
 }
 
 void computeDifference(pfs::Array2D *R1, pfs::Array2D *G1, pfs::Array2D *B1, pfs::Array2D *R2, pfs::Array2D *G2, pfs::Array2D *B2, float threshold)
@@ -1796,10 +1806,6 @@ void HdrCreationManager::doAntiGhosting()
     gsl_matrix *m = gsl_matrix_alloc(6, 1);
     gsl_permutation* perm = gsl_permutation_alloc(6);
 
-    gsl_vector_set_zero(kc);
-    gsl_matrix_set_zero(M1);
-    gsl_matrix_set_zero(M2);
-
 
     for (int i = 0; i < size; i++) 
         normalize(listmdrR.at(i), listmdrG.at(i), listmdrB.at(i));
@@ -1818,6 +1824,11 @@ void HdrCreationManager::doAntiGhosting()
 
     for (int h = 0; h < size; h++) {
         if (h == h0) continue;
+        gsl_vector_set_zero(kc);
+        gsl_matrix_set_zero(M1);
+        gsl_matrix_set_zero(M2);
+        gsl_matrix_set_zero(M);
+
         for (int j = midY - 25; j < midY + 25; j++) {
             for (int i = midX - 25; i < midX + 25; i++) {  
                 k = computeK(listmdrB.at(h0), listmdrB.at(h), h0, h, i, j);
@@ -1835,7 +1846,6 @@ void HdrCreationManager::doAntiGhosting()
                             gsl_matrix_ptr(M1, 0, 0), 1, gsl_matrix_ptr(M2, 0, 0), 6,
                             0.0f, gsl_matrix_ptr(tempM, 0, 0), 6);
                 gsl_matrix_add(M, tempM);
-                
             }
         }
         //printMatrix(M, 6, 6);
@@ -1853,9 +1863,15 @@ void HdrCreationManager::doAntiGhosting()
                     0.0f, gsl_matrix_ptr(m, 0 ,0), 1);
         printMatrix(m, 6, 1); 
     }
-    for (int i = 0; i < size; i++)
+    for (int i = 0; i < size; i++) {
         transformFromHslToRgb(listmdrR.at(i), listmdrG.at(i), listmdrB.at(i));
-
+        rescale(listmdrR.at(i), listmdrG.at(i), listmdrB.at(i));
+    }
+    
+    for (int i = 0; i < size; i++) {
+        if (i == h0) continue;
+    }
+    
     gsl_vector_free(temp_c);
     gsl_vector_free(kc);
     gsl_matrix_free(M1);
